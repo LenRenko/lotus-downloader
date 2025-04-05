@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'main_windowowuJGJ.ui'
+## Form generated from reading UI file 'main_windowtiYpZS.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.4.3
 ##
@@ -16,10 +16,9 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout,
-    QLabel, QLineEdit, QMainWindow, QMenuBar,
-    QProgressBar, QPushButton, QScrollArea, QSizePolicy,
-    QSpacerItem, QStatusBar, QToolButton, QVBoxLayout,
-    QWidget)
+    QLabel, QLineEdit, QMainWindow, QProgressBar,
+    QPushButton, QScrollArea, QSizePolicy, QSpacerItem,
+    QStatusBar, QToolButton, QVBoxLayout, QWidget)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -131,7 +130,7 @@ class Ui_MainWindow(object):
         self.dl_scroll_area.setWidgetResizable(True)
         self.scroll_area_content = QWidget()
         self.scroll_area_content.setObjectName(u"scroll_area_content")
-        self.scroll_area_content.setGeometry(QRect(0, 0, 756, 341))
+        self.scroll_area_content.setGeometry(QRect(0, 0, 756, 363))
         self.dl_scroll_area.setWidget(self.scroll_area_content)
 
         self.dl_list_vlayout.addWidget(self.dl_scroll_area)
@@ -172,10 +171,6 @@ class Ui_MainWindow(object):
         self.gridLayout.addLayout(self.verticalLayout, 0, 0, 1, 1)
 
         MainWindow.setCentralWidget(self.main_widget)
-        self.menubar = QMenuBar(MainWindow)
-        self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 800, 22))
-        MainWindow.setMenuBar(self.menubar)
         self.statusbar = QStatusBar(MainWindow)
         self.statusbar.setObjectName(u"statusbar")
         MainWindow.setStatusBar(self.statusbar)
