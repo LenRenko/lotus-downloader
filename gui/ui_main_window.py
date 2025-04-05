@@ -20,10 +20,15 @@ from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout,
     QPushButton, QScrollArea, QSizePolicy, QSpacerItem,
     QStatusBar, QToolButton, QVBoxLayout, QWidget)
 
-class Ui_MainWindow(object):
+from .ui_settings_dialog import Ui_SettingsDialog
+from core.entities import DEFAULT_SETTINGS
+import json
+import os
+
+class Ui_MainWindow(QMainWindow):
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
-            MainWindow.setObjectName(u"MainWindow")
+            MainWindow.setObjectName(u"Lotus Downloader")
         MainWindow.resize(800, 600)
         sizePolicy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
@@ -46,9 +51,13 @@ class Ui_MainWindow(object):
         self.top_left_spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
 
         self.horizontalLayout_2.addItem(self.top_left_spacer)
-
+# == Top Title Label == #
         self.top_label_img = QLabel(self.main_widget)
         self.top_label_img.setObjectName(u"top_label_img")
+        # Specific Font
+        font_id = QFontDatabase.addApplicationFont("gui/static/BigShoulder.ttf")
+        title_font = QFontDatabase.applicationFontFamilies(font_id)[0]
+        self.top_label_img.setFont(QFont(title_font, 80))
 
         self.horizontalLayout_2.addWidget(self.top_label_img)
 
@@ -67,11 +76,12 @@ class Ui_MainWindow(object):
         self.separator_top.setFrameShadow(QFrame.Sunken)
 
         self.input_vlayout.addWidget(self.separator_top)
-
+# == Input Line == #
         self.input_main_vlayout = QVBoxLayout()
         self.input_main_vlayout.setObjectName(u"input_main_vlayout")
         self.input_line = QLineEdit(self.main_widget)
         self.input_line.setObjectName(u"input_line")
+        self.input_line.setPlaceholderText("Paste link here...")
 
         self.input_main_vlayout.addWidget(self.input_line)
 
@@ -108,7 +118,7 @@ class Ui_MainWindow(object):
 
         self.input_vlayout.addWidget(self.separator_bottom)
 
-
+# == Download list == #
         self.verticalLayout.addLayout(self.input_vlayout)
 
         self.dl_list_frame = QFrame(self.main_widget)
@@ -121,7 +131,7 @@ class Ui_MainWindow(object):
         self.dl_list_vlayout.setObjectName(u"dl_list_vlayout")
         self.dl_progress_bar = QProgressBar(self.dl_list_frame)
         self.dl_progress_bar.setObjectName(u"dl_progress_bar")
-        self.dl_progress_bar.setValue(24)
+        self.dl_progress_bar.setValue(0)
 
         self.dl_list_vlayout.addWidget(self.dl_progress_bar)
 
@@ -155,14 +165,15 @@ class Ui_MainWindow(object):
         self.dl_btn_right_spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
 
         self.horizontalLayout.addItem(self.dl_btn_right_spacer)
-
+# Settings button
         self.toolButton = QToolButton(self.main_widget)
         self.toolButton.setObjectName(u"toolButton")
         icon1 = QIcon()
-        icon1.addFile("gui/static/settings_icon.png", QSize(), QIcon.Normal, QIcon.Off)
+        icon1.addFile("gui/static/material_setting_icon_1.png", QSize(), QIcon.Normal, QIcon.Off)
         self.toolButton.setIcon(icon1)
+        self.toolButton.clicked.connect(self.open_settings)
 
-        self.horizontalLayout.addWidget(self.toolButton)
+        #self.horizontalLayout.addWidget(self.toolButton)
 
 
         self.verticalLayout.addLayout(self.horizontalLayout)
@@ -181,10 +192,20 @@ class Ui_MainWindow(object):
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
-        self.top_label_img.setText(QCoreApplication.translate("MainWindow", u"Lunar Lotus Downloader", None))
+        MainWindow.setWindowTitle(QCoreApplication.translate("Lotus Youtube Downloader", u"Lotus Youtube Downloader", None))
+        self.top_label_img.setText(QCoreApplication.translate("Lotus Youtube Downloader", u"Lotus Youtube Downloader", None))
         self.add_btn.setText(QCoreApplication.translate("MainWindow", u"Add", None))
         self.dl_button.setText(QCoreApplication.translate("MainWindow", u"Download", None))
         self.toolButton.setText(QCoreApplication.translate("MainWindow", u"...", None))
     # retranslateUi
 
+# == Actions ==#
+
+    def open_settings(self):
+        if not os.path.exists("data/settings.json"):
+            with open("data/settings.json", "w") as f:
+                json.dump(DEFAULT_SETTINGS, f, indent=4)
+
+        setting_dialog = Ui_SettingsDialog()
+        setting_dialog.setupUi(setting_dialog)
+        setting_dialog.exec()
