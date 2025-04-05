@@ -33,7 +33,7 @@ class Ui_MainWindow(object):
         MainWindow.setMinimumSize(QSize(800, 600))
         MainWindow.setMaximumSize(QSize(1200, 800))
         icon = QIcon()
-        icon.addFile(u"../../lotus-ydl/static/img/exe_icon.ico", QSize(), QIcon.Normal, QIcon.Off)
+        icon.addFile("gui/static/exe_icon.ico", QSize(), QIcon.Normal, QIcon.Off)
         MainWindow.setWindowIcon(icon)
         self.main_widget = QWidget(MainWindow)
         self.main_widget.setObjectName(u"main_widget")
@@ -159,7 +159,7 @@ class Ui_MainWindow(object):
         self.toolButton = QToolButton(self.main_widget)
         self.toolButton.setObjectName(u"toolButton")
         icon1 = QIcon()
-        icon1.addFile(u"../../lotus-ydl/static/img/settings_icon.png", QSize(), QIcon.Normal, QIcon.Off)
+        icon1.addFile("gui/static/settings_icon.png", QSize(), QIcon.Normal, QIcon.Off)
         self.toolButton.setIcon(icon1)
 
         self.horizontalLayout.addWidget(self.toolButton)
