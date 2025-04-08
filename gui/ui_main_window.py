@@ -246,6 +246,8 @@ class Ui_MainWindow(QMainWindow):
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
 
+        self.download_thread = YTDownloadManager()
+
         self.retranslateUi(MainWindow)
 
         QMetaObject.connectSlotsByName(MainWindow)
@@ -263,6 +265,24 @@ class Ui_MainWindow(QMainWindow):
             QCoreApplication.translate("MainWindow", "Download", None)
         )
 
+    def closeEvent(self, event):
+        if self.download_thread.is_alive():
+            self.download_thread.pause()
+            reply = QMessageBox.warning(
+                self,
+                "Download in progress",
+                "Download still running, do you want to quit ?",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+
+            if reply == QMessageBox.Yes:
+                self.download_thread.stop()
+                self.download_thread.join()
+                event.accept()
+            else:
+                self.download_thread.resume()
+                event.ignore()
+
     # == Actions ==#
     def on_url_add(self):
         self.clear_warning()
@@ -279,7 +299,7 @@ class Ui_MainWindow(QMainWindow):
 
     def monitor(self, thread, ttype=None):
         if thread.is_alive():
-            QTimer.singleShot(100, lambda: self.monitor(thread, ttype))
+            QTimer.singleShot(500, lambda: self.monitor(thread, ttype))
             self.display_warning_msg("...Adding songs to list...", "orange")
             self.dl_button.setEnabled(False)
             self.dl_progress_bar.setRange(0, 0)
@@ -293,7 +313,7 @@ class Ui_MainWindow(QMainWindow):
 
     def monitor_download(self, thread):
         if thread.is_alive():
-            QTimer.singleShot(100, lambda: self.monitor_download(thread))
+            QTimer.singleShot(500, lambda: self.monitor_download(thread))
         else:
             self.dl_button.setEnabled(True)
             self.display_warning_msg("Download completed !", "green")
@@ -342,16 +362,10 @@ class Ui_MainWindow(QMainWindow):
             self.display_warning_msg("Nothing to download", "red")
             self.dl_button.setEnabled(True)
         else:
-            self.download_thread = YTDownloadManager(DOWNLOAD_LIST)
+            self.download_thread.set_song_list(DOWNLOAD_LIST)
             self.download_thread.signals.downloaded_signal.connect(self.update_dl_ui)
             self.download_thread.start()
             self.monitor_download(self.download_thread)
-
-    def closeEvent(self, event):
-        if self.download_thread and self.download_thread.is_alive():
-            self.download_thread.stop()
-            self.download_thread.join()
-        event.accept()
 
     # == UTILS == #
     @Slot(int)

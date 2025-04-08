@@ -140,13 +140,16 @@ class DownloadSignals(QObject):
 
 
 class YTDownloadManager(Thread):
-    def __init__(self, song_list: list):
+    def __init__(self):
         super().__init__()
-        self.song_list = song_list
+        self.song_list = []
         self.signals = DownloadSignals()
         self._stop_event = Event()
+        self._pause_event = Event()
+        self._pause_event.set()
 
     def run(self):
+        print("Manager started :", self.ident)
         with open(os.path.abspath("data/settings.json"), "r") as f:
             settings = json.load(f)
         yt_opt = set_options(
@@ -155,6 +158,8 @@ class YTDownloadManager(Thread):
         for index, song_url in enumerate(self.song_list):
             if self._stop_event.is_set():
                 break
+
+            self._pause_event.wait()
             try:
                 if song_url not in COMPLETED_LIST:
                     self.download_song(yt_opt, song_url)
@@ -162,6 +167,7 @@ class YTDownloadManager(Thread):
                     COMPLETED_LIST.append(song_url)
             except Exception:
                 self.signals.error_signal.emit("Could not download song...")
+        print("Manager exited")
 
     def download_song(self, yt_opt, url):
         try:
@@ -170,5 +176,16 @@ class YTDownloadManager(Thread):
         except yt.utils.DownloadError:
             raise URLError
 
+    def set_song_list(self, song_list: list):
+        self.song_list = song_list
+
     def stop(self):
         self._stop_event.set()
+        self._pause_event.set()
+        self.join(timeout=5.0)
+
+    def pause(self):
+        self._pause_event.clear()
+
+    def resume(self):
+        self._pause_event.set()
