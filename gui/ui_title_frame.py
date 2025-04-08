@@ -13,6 +13,17 @@ from PySide6.QtWidgets import (
 import requests
 
 
+class NonClickableCheckBox(QCheckBox):
+    def __init__(self, text=""):
+        super().__init__(text)
+
+    def mousePressEvent(self, e):
+        e.ignore()
+
+    def setCheckState(self, state):
+        return super().setCheckState(state)
+
+
 class Ui_Frame(QFrame):
     def setupUi(self, Frame):
         if not Frame.objectName():
@@ -35,12 +46,13 @@ class Ui_Frame(QFrame):
 
         self.title_label = QLabel(Frame)
         self.title_label.setObjectName("title_label")
+        self.title_label.setMaximumWidth(500)
+        # self.title_label.setWordWrap(True)
 
         self.horizontalLayout.addWidget(self.title_label)
 
-        self.dl_check = QCheckBox(Frame)
+        self.dl_check = NonClickableCheckBox(Frame)
         self.dl_check.setObjectName("dl_check")
-        self.dl_check.setCheckable(False)
 
         self.horizontalLayout.addWidget(self.dl_check)
 
@@ -89,6 +101,6 @@ class Ui_Frame(QFrame):
                 pix = QPixmap()
                 pix.loadFromData(response.content)
                 return pix
-        except Exception as e:
+        except Exception:
             pass
         return None

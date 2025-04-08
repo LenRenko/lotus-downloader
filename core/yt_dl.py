@@ -6,7 +6,8 @@ import json
 
 from .entities import Format, DOWNLOAD_LIST, COMPLETED_LIST, URLError, YOUTUBE_BASE
 
-from threading import Thread
+from threading import Thread, Event
+from PySide6.QtCore import Signal, QObject
 
 
 def set_options(dir: str, format: str, skip_dl: bool) -> dict:
@@ -73,24 +74,36 @@ def extract_song_info(url: str):
     except yt.utils.DownloadError:
         raise URLError
 
+
 def extract_playlist_songs(url: str):
     playlist_titles = []
+    playlist_thumbnails = []
     with open(os.path.abspath("data/settings.json"), "r") as f:
         settings = json.load(f)
-    yt_opt = set_options(None, settings['output_dir'], settings['output_format'], skip_dl=True, )
+    yt_opt = set_options(
+        settings["output_dir"],
+        settings["output_format"],
+        skip_dl=True,
+    )
     try:
         with yt.YoutubeDL(yt_opt) as ydl:
             info = ydl.extract_info(url, download=False)
-            playlist_count = info['playlist_count']
-            
-            for songs in info['entries']:
-                song_url = YOUTUBE_BASE+str(songs['id'])
+            playlist_count = info["playlist_count"]
+
+            for songs in info["entries"]:
+                song_url = YOUTUBE_BASE + str(songs["id"])
                 if song_url not in DOWNLOAD_LIST and song_url not in COMPLETED_LIST:
                     DOWNLOAD_LIST.append(song_url)
-                    playlist_titles.append(songs['title'])
-            return {"playlist_titles" : playlist_titles, "playlist_count": playlist_count}
+                    playlist_titles.append(songs["title"])
+                    playlist_thumbnails.append(songs["thumbnail"])
+            return {
+                "playlist_titles": playlist_titles,
+                "playlist_thumbnails": playlist_thumbnails,
+                "playlist_count": playlist_count,
+            }
     except yt.utils.DownloadError:
         raise URLError
+
 
 class MonoYTExtractThread(Thread):
     def __init__(self, url: str):
@@ -102,5 +115,60 @@ class MonoYTExtractThread(Thread):
         try:
             self.song_info = extract_song_info(self.url)
             return self.song_info
-        except Exception as e:
+        except Exception:
             pass
+
+
+class YTExtractPlaylistThread(Thread):
+    def __init__(self, url: str):
+        super().__init__()
+        self.url = url
+        self.playlist_titles = []
+
+    def run(self):
+        try:
+            self.playlist_titles = extract_playlist_songs(self.url)
+            return self.playlist_titles
+        except Exception:
+            pass
+
+
+# ===================================== #
+class DownloadSignals(QObject):
+    downloaded_signal = Signal(int)
+    error_signal = Signal(str)
+
+
+class YTDownloadManager(Thread):
+    def __init__(self, song_list: list):
+        super().__init__()
+        self.song_list = song_list
+        self.signals = DownloadSignals()
+        self._stop_event = Event()
+
+    def run(self):
+        with open(os.path.abspath("data/settings.json"), "r") as f:
+            settings = json.load(f)
+        yt_opt = set_options(
+            settings["output_dir"], settings["output_format"], skip_dl=False
+        )
+        for index, song_url in enumerate(self.song_list):
+            if self._stop_event.is_set():
+                break
+            try:
+                if song_url not in COMPLETED_LIST:
+                    self.download_song(yt_opt, song_url)
+                    self.signals.downloaded_signal.emit(index)
+                    COMPLETED_LIST.append(song_url)
+            except Exception:
+                self.signals.error_signal.emit("Could not download song...")
+
+    def download_song(self, yt_opt, url):
+        try:
+            with yt.YoutubeDL(yt_opt) as ydl:
+                ydl.download([url])
+        except yt.utils.DownloadError:
+            raise URLError
+
+    def stop(self):
+        self._stop_event.set()
