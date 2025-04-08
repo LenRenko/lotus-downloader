@@ -6,7 +6,8 @@ import json
 
 from .entities import Format, DOWNLOAD_LIST, COMPLETED_LIST, URLError, YOUTUBE_BASE
 
-from threading import Thread
+from threading import Thread, Event
+from PySide6.QtCore import Signal, QObject
 
 
 def set_options(dir: str, format: str, skip_dl: bool) -> dict:
@@ -130,3 +131,44 @@ class YTExtractPlaylistThread(Thread):
             return self.playlist_titles
         except Exception:
             pass
+
+
+# ===================================== #
+class DownloadSignals(QObject):
+    downloaded_signal = Signal(int)
+    error_signal = Signal(str)
+
+
+class YTDownloadManager(Thread):
+    def __init__(self, song_list: list):
+        super().__init__()
+        self.song_list = song_list
+        self.signals = DownloadSignals()
+        self._stop_event = Event()
+
+    def run(self):
+        with open(os.path.abspath("data/settings.json"), "r") as f:
+            settings = json.load(f)
+        yt_opt = set_options(
+            settings["output_dir"], settings["output_format"], skip_dl=False
+        )
+        for index, song_url in enumerate(self.song_list):
+            if self._stop_event.is_set():
+                break
+            try:
+                if song_url not in COMPLETED_LIST:
+                    self.download_song(yt_opt, song_url)
+                    self.signals.downloaded_signal.emit(index)
+                    COMPLETED_LIST.append(song_url)
+            except Exception:
+                self.signals.error_signal.emit("Could not download song...")
+
+    def download_song(self, yt_opt, url):
+        try:
+            with yt.YoutubeDL(yt_opt) as ydl:
+                ydl.download([url])
+        except yt.utils.DownloadError:
+            raise URLError
+
+    def stop(self):
+        self._stop_event.set()

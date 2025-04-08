@@ -30,13 +30,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QMessageBox,
+    QCheckBox,
 )
 
 
 from .ui_settings_dialog import Ui_SettingsDialog
 from .ui_title_frame import Ui_Frame
 from core.entities import DEFAULT_SETTINGS, DOWNLOAD_LIST, COMPLETED_LIST, TType
-from core.yt_dl import MonoYTExtractThread, YTExtractPlaylistThread
+from core.yt_dl import MonoYTExtractThread, YTExtractPlaylistThread, YTDownloadManager
 from core.controller import is_youtube_url, is_youtube_playlist_url
 
 
@@ -226,6 +227,7 @@ class Ui_MainWindow(QMainWindow):
         # == DL BTN == #
         self.dl_button = QPushButton(self.main_widget)
         self.dl_button.setObjectName("dl_button")
+        self.dl_button.clicked.connect(self.start_download)
 
         self.horizontalLayout_5.addWidget(self.dl_button)
 
@@ -273,22 +275,28 @@ class Ui_MainWindow(QMainWindow):
                 info_thread.start()
                 self.monitor(info_thread, TType.S)
         else:
-            self.display_warning("Not a valid URL")
+            self.display_warning_msg("Not a valid URL", "red")
 
     def monitor(self, thread, ttype=None):
         if thread.is_alive():
             QTimer.singleShot(100, lambda: self.monitor(thread, ttype))
-            self.display_warning("Adding playlist to list...")
+            self.display_warning_msg("...Adding songs to list...", "orange")
             self.dl_button.setEnabled(False)
             self.dl_progress_bar.setRange(0, 0)
         else:
             if ttype == TType.PL:
                 self.update_with_playlist(thread.playlist_titles)
-                self.clear_warning()
-                self.dl_button.setEnabled(True)
-                self.dl_progress_bar.setRange(0, 100)
+                self.clear_add_state()
             else:
                 self.update_info_list(thread.song_info)
+                self.clear_add_state()
+
+    def monitor_download(self, thread):
+        if thread.is_alive():
+            QTimer.singleShot(100, lambda: self.monitor_download(thread))
+        else:
+            self.dl_button.setEnabled(True)
+            self.display_warning_msg("Download completed !", "green")
 
     # == OPE == #
     def get_song_info(self, url: str):
@@ -315,34 +323,58 @@ class Ui_MainWindow(QMainWindow):
         self.update_song_count(len(COMPLETED_LIST), len(DOWNLOAD_LIST))
 
     def add_song_frame(self, title: str, thumbnail: str):
+        """Add a Ui_Frame to the list scroll area"""
         frame = QFrame()
         ui = Ui_Frame()
         ui.setupUi(frame)
         ui.set_title(title)
         ui.set_thumbnail(thumbnail)
 
-        self.frame_pool.append(ui)
-
         self.scroll_layout.addWidget(frame)
+        self.frame_pool.append(frame)
+
+    def start_download(self):
+        self.dl_button.setEnabled(False)
+        self.display_warning_msg("Downloading...", "orange")
+        if DOWNLOAD_LIST is None:
+            self.display_warning_msg("Nothing to download", "red")
+            self.dl_button.setEnabled(True)
+        else:
+            self.download_thread = YTDownloadManager(DOWNLOAD_LIST)
+            self.download_thread.signals.downloaded_signal.connect(self.update_dl_ui)
+            self.download_thread.start()
+            self.monitor_download(self.download_thread)
+
+    def closeEvent(self, event):
+        if self.download_thread and self.download_thread.is_alive():
+            self.download_thread.stop()
+            self.download_thread.join()
+        event.accept()
 
     # == UTILS == #
-    def update_progress_bar(self):
-        pass
+    @Slot(int)
+    def update_dl_ui(self, index: int):
+        self.update_song_count(len(COMPLETED_LIST), len(DOWNLOAD_LIST))
+        value = (len(COMPLETED_LIST) / len(DOWNLOAD_LIST)) * 100
+        self.dl_progress_bar.setValue(int(value))
+        frame = self.scroll_layout.itemAt(index).widget()
+        frame.findChild(QCheckBox).setChecked(True)
 
     def update_song_count(self, element: int, total: int):
         self.count_label.setText(f"{element}/{total}")
 
-    def display_warning(self, msg: str):
+    def display_warning_msg(self, msg: str, color: str):
         self.warning_label.setText(msg)
-        self.warning_label.setStyleSheet("color: red;")
-
-    def display_finished(self):
-        self.warning_label.setText("Download finished !")
-        self.warning_label.setStyleSheet("color: green;")
+        self.warning_label.setStyleSheet(f"color: {color};")
 
     def clear_warning(self):
         self.warning_label.setText("")
         self.warning_label.setStyleSheet("color: black;")
+
+    def clear_add_state(self):
+        self.clear_warning()
+        self.dl_button.setEnabled(True)
+        self.dl_progress_bar.setRange(0, 100)
 
     def open_settings(self):
         """Open settings dialog"""
