@@ -89,6 +89,6 @@ class Ui_Frame(QFrame):
                 pix = QPixmap()
                 pix.loadFromData(response.content)
                 return pix
-        except Exception as e:
+        except Exception:
             pass
         return None
