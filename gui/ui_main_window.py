@@ -304,6 +304,8 @@ class Ui_MainWindow(QMainWindow):
             info_thread = MonoYTExtractThread(url)
             info_thread.start()
             self.monitor(info_thread)
+        else:
+            self.display_warning_msg("Song already in list", "red")
 
     def get_playlist_info(self, url: str):
         playlist_thread = YTExtractPlaylistThread(url)

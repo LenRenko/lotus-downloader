@@ -46,6 +46,8 @@ class Ui_Frame(QFrame):
 
         self.title_label = QLabel(Frame)
         self.title_label.setObjectName("title_label")
+        self.title_label.setMaximumWidth(500)
+        # self.title_label.setWordWrap(True)
 
         self.horizontalLayout.addWidget(self.title_label)
 
