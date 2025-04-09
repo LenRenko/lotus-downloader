@@ -39,7 +39,7 @@ This is a simple Youtube Downloader GUI application build in python with PyQt. I
 
 ---
 #### Where to get the .exe file ? 
-- You can get the exe file [here](https://github.com/LenRenko/lotus-downloader-v2/releases) or click on release on the right.
+- You can get the installer exe file [here](https://github.com/LenRenko/lotus-downloader-v2/releases).
 
 #### How to use it ?
 - Go to youtube and copy the url of your favorite song or video
