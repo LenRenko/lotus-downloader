@@ -9,7 +9,7 @@ YOUTUBE_BASE = "https://www.youtube.com/watch?v="
 COMPLETED = "Completed"
 DOWNLOADING = "Downloading"
 output_format = "MP3"
-output_dir = os.path.expanduser("~\\YTDownloader\\YTDownloadOutput\\")
+output_dir = os.path.expanduser("~\\LotusDownloaderOutput\\")
 
 DEFAULT_SETTINGS = {
     "output_dir": output_dir,

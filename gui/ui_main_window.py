@@ -314,6 +314,8 @@ class Ui_MainWindow(QMainWindow):
     def monitor_download(self, thread):
         if thread.is_alive():
             QTimer.singleShot(500, lambda: self.monitor_download(thread))
+            if thread._stop_event.is_set():
+                self.download_thread.resume()
         else:
             self.dl_button.setEnabled(True)
             self.display_warning_msg("Download completed !", "green")
@@ -358,7 +360,7 @@ class Ui_MainWindow(QMainWindow):
     def start_download(self):
         self.dl_button.setEnabled(False)
         self.display_warning_msg("Downloading...", "orange")
-        if DOWNLOAD_LIST is None:
+        if not DOWNLOAD_LIST:
             self.display_warning_msg("Nothing to download", "red")
             self.dl_button.setEnabled(True)
         else:
@@ -392,6 +394,8 @@ class Ui_MainWindow(QMainWindow):
         self.dl_button.setEnabled(True)
         self.dl_progress_bar.setRange(0, 100)
 
+    
+    ## ================================================= ##
     def open_settings(self):
         """Open settings dialog"""
         if not os.path.exists("data/settings.json"):
@@ -402,7 +406,6 @@ class Ui_MainWindow(QMainWindow):
         setting_dialog.setupUi(setting_dialog)
         setting_dialog.exec()
 
-    ## ================================================= ##
     @Slot()
     def show_yes_no_dialog(self):
         dialog = QMessageBox(self)

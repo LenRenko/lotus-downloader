@@ -4,6 +4,7 @@ import re
 
 from PySide6.QtWidgets import QApplication
 from qt_material import apply_stylesheet
+from .entities import DEFAULT_SETTINGS
 
 
 def init_theme(app: QApplication):
@@ -19,6 +20,10 @@ def init_theme(app: QApplication):
         apply_stylesheet(app, theme="dark_amber.xml")
 
 
+def init_settings():
+    if not os.path.exists("data/settings.json"):
+        with open("data/settings.json", "w") as f:
+            json.dump(DEFAULT_SETTINGS, f, indent=4)
 # == Youtube controllers == #
 
 
@@ -31,11 +36,3 @@ def is_youtube_playlist_url(url):
 def is_youtube_url(url):
     pattern = r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/(watch\?v=|v/|embed/)?[a-zA-Z0-9_-]{11}"
     return re.search(pattern, url) is not None
-
-
-if __name__ == "__main__":
-    print(
-        is_youtube_url(
-            "https://www.youtube.com/watch?v=PO9UC2Zt59c&list=PL3pZ_4pol-jrq92ptfWed2E8_R9R_FC8R"
-        )
-    )
