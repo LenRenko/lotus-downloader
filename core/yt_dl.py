@@ -6,8 +6,9 @@ import json
 
 from .entities import Format, DOWNLOAD_LIST, COMPLETED_LIST, URLError, YOUTUBE_BASE
 
-from threading import Thread, Event
+from threading import Thread, Event, Semaphore
 from PySide6.QtCore import Signal, QObject
+from queue import Queue
 
 
 def set_options(dir: str, format: str, skip_dl: bool) -> dict:
@@ -135,57 +136,88 @@ class YTExtractPlaylistThread(Thread):
 
 # ===================================== #
 class DownloadSignals(QObject):
-    downloaded_signal = Signal(int)
-    error_signal = Signal(str)
+    finished = Signal(int)  # index of song
+    error = Signal(int, str)  # index and msg
 
 
-class YTDownloadManager(Thread):
-    def __init__(self):
+class DownloadWorker(Thread):
+    def __init__(self, index, url, stop_event, signals, semaphore, settings):
         super().__init__()
-        self.song_list = []
-        self.signals = DownloadSignals()
-        self._stop_event = Event()
-        self._pause_event = Event()
-        self._pause_event.set()
+        self.index = index
+        self.url = url
+        self.signals = signals
+        self.stop_event = stop_event
+        self.semaphore = semaphore
+        self.yt_options = set_options(
+            settings["output_dir"],
+            settings["output_format"],
+            skip_dl=False,
+        )
 
     def run(self):
-        print("Manager started :", self.ident)
-        with open(os.path.abspath("data/settings.json"), "r") as f:
-            settings = json.load(f)
-        yt_opt = set_options(
-            settings["output_dir"], settings["output_format"], skip_dl=False
-        )
-        for index, song_url in enumerate(self.song_list):
-            if self._stop_event.is_set():
-                break
-
-            self._pause_event.wait()
+        with self.semaphore:
+            if self.stop_event.is_set():
+                return
             try:
-                if song_url not in COMPLETED_LIST:
-                    self.download_song(yt_opt, song_url)
-                    self.signals.downloaded_signal.emit(index)
-                    COMPLETED_LIST.append(song_url)
-            except Exception:
-                self.signals.error_signal.emit("Could not download song...")
-        print("Manager exited")
+                with yt.YoutubeDL(self.yt_options) as ydl:
+                    ydl.download([self.url])
+                self.signals.finished.emit(self.index)
+            except yt.utils.DownloadError as e:
+                self.signals.error.emit(self.index, str(e))
 
-    def download_song(self, yt_opt, url):
-        try:
-            with yt.YoutubeDL(yt_opt) as ydl:
-                ydl.download([url])
-        except yt.utils.DownloadError:
-            raise URLError
 
-    def set_song_list(self, song_list: list):
-        self.song_list = song_list
+class DownloadManager(QObject):
+    download_finished = Signal()
+    worker_done = Signal(str)
 
-    def stop(self):
-        self._stop_event.set()
-        self._pause_event.set()
-        self.join(timeout=5.0)
+    def __init__(self, max_concurrent=5, update_ui_callback=None):
+        super().__init__()
+        self.max_concurrent = max_concurrent
+        with open(os.path.abspath("data/settings.json"), "r") as f:
+            self.settings = json.load(f)
 
-    def pause(self):
-        self._pause_event.clear()
+        self.update_dl_ui = update_ui_callback
 
-    def resume(self):
-        self._pause_event.set()
+        self.download_queue = Queue()
+        self.workers = []
+        self.active_worker = 0
+
+        self.stop_event = Event()
+        self.semaphore = Semaphore(self.max_concurrent)
+
+    def add_song(self, url, index):
+        self.download_queue.put((index, url))
+        self._maybe_start_worker()
+
+    def _maybe_start_worker(self):
+        if self.semaphore._value > 0 and not self.download_queue.empty():
+            self.active_worker += 1
+            self.semaphore.acquire()
+
+            index, url = self.download_queue.get()
+            signals = DownloadSignals()
+            if self.update_dl_ui:
+                signals.finished.connect(self.update_dl_ui)
+            signals.finished.connect(self._on_worker_done)
+
+            worker = DownloadWorker(
+                index, url, self.stop_event, signals, self.semaphore, self.settings
+            )
+            worker.start()
+
+    def _on_worker_done(self):
+        self.active_worker -= 1
+        self.semaphore.release()
+
+        if not self.download_queue.empty():
+            self._maybe_start_worker()
+        elif self.active_worker == 0:
+            self.download_finished.emit()
+
+    def stop_download(self):
+        self.stop_event.set()
+        while not self.download_queue.empty():
+            try:
+                self.download_queue.get_nowait()
+            except Queue.Empty:
+                break

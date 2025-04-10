@@ -24,6 +24,8 @@ def init_settings():
     if not os.path.exists("data/settings.json"):
         with open("data/settings.json", "w") as f:
             json.dump(DEFAULT_SETTINGS, f, indent=4)
+
+
 # == Youtube controllers == #
 
 
