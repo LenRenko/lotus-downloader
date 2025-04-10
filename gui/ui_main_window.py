@@ -11,7 +11,7 @@
 import json
 import os
 
-from PySide6.QtCore import QCoreApplication, QMetaObject, QTimer, QRect, QSize, Slot
+from PySide6.QtCore import QCoreApplication, QMetaObject, QTimer, QRect, QSize
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFrame,
@@ -37,11 +37,20 @@ from PySide6.QtWidgets import (
 from .ui_settings_dialog import Ui_SettingsDialog
 from .ui_title_frame import Ui_Frame
 from core.entities import DEFAULT_SETTINGS, DOWNLOAD_LIST, COMPLETED_LIST, TType
-from core.yt_dl import MonoYTExtractThread, YTExtractPlaylistThread, YTDownloadManager
+from core.yt_dl import MonoYTExtractThread, YTExtractPlaylistThread, DownloadManager
 from core.controller import is_youtube_url, is_youtube_playlist_url
 
 
 class Ui_MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.download_manager = DownloadManager(
+            max_concurrent=5, update_ui_callback=self.on_song_downloaded
+        )
+        self.download_manager.download_finished.connect(self.on_download_finished)
+
+        self._downloading = False
+
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
             MainWindow.setObjectName("MainWindow")
@@ -246,8 +255,6 @@ class Ui_MainWindow(QMainWindow):
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
 
-        self.download_thread = YTDownloadManager()
-
         self.retranslateUi(MainWindow)
 
         QMetaObject.connectSlotsByName(MainWindow)
@@ -266,8 +273,7 @@ class Ui_MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
-        if self.download_thread.is_alive():
-            self.download_thread.pause()
+        if self._downloading:
             reply = QMessageBox.warning(
                 self,
                 "Download in progress",
@@ -276,14 +282,16 @@ class Ui_MainWindow(QMainWindow):
             )
 
             if reply == QMessageBox.Yes:
-                self.download_thread.stop()
-                self.download_thread.join()
+                self.download_manager.stop_download()
                 event.accept()
             else:
-                self.download_thread.resume()
                 event.ignore()
+        else:
+            event.accept()
 
-    # == Actions ==#
+    # =====                 ===== #
+    # ======    EVENTS     ====== #
+    # =====                 ===== #
     def on_url_add(self):
         self.clear_warning()
         url = self.input_line.text()
@@ -296,29 +304,6 @@ class Ui_MainWindow(QMainWindow):
                 self.monitor(info_thread, TType.S)
         else:
             self.display_warning_msg("Not a valid URL", "red")
-
-    def monitor(self, thread, ttype=None):
-        if thread.is_alive():
-            QTimer.singleShot(500, lambda: self.monitor(thread, ttype))
-            self.display_warning_msg("...Adding songs to list...", "orange")
-            self.dl_button.setEnabled(False)
-            self.dl_progress_bar.setRange(0, 0)
-        else:
-            if ttype == TType.PL:
-                self.update_with_playlist(thread.playlist_titles)
-                self.clear_add_state()
-            else:
-                self.update_info_list(thread.song_info)
-                self.clear_add_state()
-
-    def monitor_download(self, thread):
-        if thread.is_alive():
-            QTimer.singleShot(500, lambda: self.monitor_download(thread))
-            if thread._stop_event.is_set():
-                self.download_thread.resume()
-        else:
-            self.dl_button.setEnabled(True)
-            self.display_warning_msg("Download completed !", "green")
 
     # == OPE == #
     def get_song_info(self, url: str):
@@ -334,18 +319,6 @@ class Ui_MainWindow(QMainWindow):
         playlist_thread.start()
         self.monitor(playlist_thread, TType.PL)
 
-    def update_info_list(self, song_info: dict):
-        self.add_song_frame(song_info["title"], song_info["thumbnail"])
-        self.update_song_count(len(COMPLETED_LIST), len(DOWNLOAD_LIST))
-
-    def update_with_playlist(self, pl_info: list):
-        for title, thumbnail in zip(
-            pl_info["playlist_titles"], pl_info["playlist_thumbnails"]
-        ):
-            self.add_song_frame(title, thumbnail)
-
-        self.update_song_count(len(COMPLETED_LIST), len(DOWNLOAD_LIST))
-
     def add_song_frame(self, title: str, thumbnail: str):
         """Add a Ui_Frame to the list scroll area"""
         frame = QFrame()
@@ -358,43 +331,50 @@ class Ui_MainWindow(QMainWindow):
         self.frame_pool.append(frame)
 
     def start_download(self):
-        self.dl_button.setEnabled(False)
+        self.lock_btns(True)
         self.display_warning_msg("Downloading...", "orange")
-        if not DOWNLOAD_LIST:
+        self._downloading = True
+        if not DOWNLOAD_LIST or len(DOWNLOAD_LIST) == len(COMPLETED_LIST):
             self.display_warning_msg("Nothing to download", "red")
             self.dl_button.setEnabled(True)
         else:
-            self.download_thread.set_song_list(DOWNLOAD_LIST)
-            self.download_thread.signals.downloaded_signal.connect(self.update_dl_ui)
-            self.download_thread.start()
-            self.monitor_download(self.download_thread)
+            for index, url in enumerate(DOWNLOAD_LIST):
+                if url not in COMPLETED_LIST:
+                    self.download_manager.add_song(url, index)
 
     # == UTILS == #
-    @Slot(int)
-    def update_dl_ui(self, index: int):
+    def monitor(self, thread, ttype=None):
+        if thread.is_alive():
+            QTimer.singleShot(500, lambda: self.monitor(thread, ttype))
+            self.display_warning_msg("...Adding songs to list...", "orange")
+            self.dl_button.setEnabled(False)
+            self.dl_progress_bar.setRange(0, 0)
+        else:
+            if ttype == TType.PL:
+                self.update_with_playlist(thread.playlist_titles)
+                self.clear_add_state()
+            else:
+                self.update_info_list(thread.song_info)
+                self.clear_add_state()
+        self.set_progress_bar()
+
+    def on_song_downloaded(self, index: int):
+        # add url to completed list
+        COMPLETED_LIST.append(DOWNLOAD_LIST[index])
+
+        # update ui (progress bar and checkbox when download finished)
         self.update_song_count(len(COMPLETED_LIST), len(DOWNLOAD_LIST))
         value = (len(COMPLETED_LIST) / len(DOWNLOAD_LIST)) * 100
         self.dl_progress_bar.setValue(int(value))
+
         frame = self.scroll_layout.itemAt(index).widget()
         frame.findChild(QCheckBox).setChecked(True)
 
-    def update_song_count(self, element: int, total: int):
-        self.count_label.setText(f"{element}/{total}")
+    def on_download_finished(self):
+        self.lock_btns(False)
+        self.display_warning_msg("Download completed !", "green")
+        self._downloading = False
 
-    def display_warning_msg(self, msg: str, color: str):
-        self.warning_label.setText(msg)
-        self.warning_label.setStyleSheet(f"color: {color};")
-
-    def clear_warning(self):
-        self.warning_label.setText("")
-        self.warning_label.setStyleSheet("color: black;")
-
-    def clear_add_state(self):
-        self.clear_warning()
-        self.dl_button.setEnabled(True)
-        self.dl_progress_bar.setRange(0, 100)
-
-    
     ## ================================================= ##
     def open_settings(self):
         """Open settings dialog"""
@@ -406,7 +386,6 @@ class Ui_MainWindow(QMainWindow):
         setting_dialog.setupUi(setting_dialog)
         setting_dialog.exec()
 
-    @Slot()
     def show_yes_no_dialog(self):
         dialog = QMessageBox(self)
         dialog.setWindowTitle("Confirmation")
@@ -422,3 +401,43 @@ class Ui_MainWindow(QMainWindow):
         else:
             song_url = self.input_line.text().split("&")[0]
             self.get_song_info(song_url)
+
+    ## MINIMAL ##
+    def display_warning_msg(self, msg: str, color: str):
+        self.warning_label.setText(msg)
+        self.warning_label.setStyleSheet(f"color: {color};")
+
+    def clear_warning(self):
+        self.warning_label.setText("")
+        self.warning_label.setStyleSheet("color: black;")
+
+    def clear_add_state(self):
+        self.clear_warning()
+        self.dl_button.setEnabled(True)
+        self.dl_progress_bar.setRange(0, 100)
+
+    def set_progress_bar(self):
+        if not DOWNLOAD_LIST or not COMPLETED_LIST:
+            self.dl_progress_bar.setValue(0)
+        else:
+            value = len(COMPLETED_LIST) / len(DOWNLOAD_LIST) * 100
+            self.dl_progress_bar.setValue(int(value))
+
+    def update_info_list(self, song_info: dict):
+        self.add_song_frame(song_info["title"], song_info["thumbnail"])
+        self.update_song_count(len(COMPLETED_LIST), len(DOWNLOAD_LIST))
+
+    def lock_btns(self, lock: bool):
+        self.dl_button.setEnabled(not lock)
+        self.toolButton.setEnabled(not lock)
+
+    def update_with_playlist(self, pl_info: list):
+        for title, thumbnail in zip(
+            pl_info["playlist_titles"], pl_info["playlist_thumbnails"]
+        ):
+            self.add_song_frame(title, thumbnail)
+
+        self.update_song_count(len(COMPLETED_LIST), len(DOWNLOAD_LIST))
+
+    def update_song_count(self, element: int, total: int):
+        self.count_label.setText(f"{element}/{total}")
